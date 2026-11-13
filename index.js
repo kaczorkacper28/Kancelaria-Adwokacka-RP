@@ -58,7 +58,6 @@ if(panelChannel){
  const panelPayload={embeds:[embed],components:[new ActionRowBuilder().addComponents(menu)]};
  if(oldPanel)await oldPanel.edit(panelPayload);
  else await panelChannel.send(panelPayload);
- }
 }
 return {madeRoles,madeCategories,madeChannels};
 }
