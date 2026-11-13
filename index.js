@@ -1,6 +1,6 @@
 "use strict";
 require("dotenv").config();
-const {Client,GatewayIntentBits,REST,Routes,SlashCommandBuilder,PermissionFlagsBits,MessageFlags,ActionRowBuilder,ButtonBuilder,ButtonStyle,AttachmentBuilder}=require("discord.js");
+const {Client,GatewayIntentBits,REST,Routes,SlashCommandBuilder,PermissionFlagsBits,MessageFlags,ActionRowBuilder,ButtonBuilder,ButtonStyle,AttachmentBuilder,EmbedBuilder,StringSelectMenuBuilder,ModalBuilder,TextInputBuilder,TextInputStyle}=require("discord.js");
 const fs=require("node:fs"),path=require("node:path");
 const dir=path.join(__dirname,"data"),file=path.join(dir,"database.json");
 fs.mkdirSync(dir,{recursive:true});
@@ -54,14 +54,41 @@ if(panelChannel){
  const recent=await panelChannel.messages.fetch({limit:50}).catch(()=>null);
  const hasPanel=recent?.some(m=>m.author.id===client.user.id&&m.components.some(row=>row.components.some(b=>b.customId==="ticket_open")));
  if(!hasPanel){
-  const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("ticket_open").setLabel("Otwórz ticket").setEmoji("🎫").setStyle(ButtonStyle.Primary));
-  await panelChannel.send({content:"**📞 Kontakt z Kancelarią Adwokacką RP**\\nAby skontaktować się z kancelarią, kliknij przycisk poniżej. Otrzymasz prywatny kanał, widoczny dla Ciebie i upoważnionych pracowników.",components:[row]});
+  const embed=new EmbedBuilder().setColor(0x1f4e79).setTitle("⚖️ BIURO OBSŁUGI KLIENTA — KANCELARIA ADWOKACKA RP").setDescription("Witamy w systemie zgłoszeń Kancelarii Adwokackiej RP.\n\nAby rozpocząć kontakt z kancelarią, wybierz kategorię zgłoszenia z listy poniżej. Następnie wypełnij formularz. Na jego podstawie zostanie utworzony prywatny kanał rozmowy z upoważnionym personelem.").addFields({name:"📋 Dostępne zgłoszenia",value:"• Pomoc prawna\n• Sprawa karna / cywilna\n• Sprawa administracyjna / gospodarcza\n• Skarga lub odwołanie\n• Inne zapytanie"},{name:"🔒 Poufność",value:"Treść zgłoszenia będzie widoczna wyłącznie dla Ciebie oraz upoważnionych pracowników kancelarii."}).setFooter({text:"Kancelaria Adwokacka RP • Elektroniczny system obsługi zgłoszeń"});
+  const menu=new StringSelectMenuBuilder().setCustomId("ticket_category").setPlaceholder("Wybierz kategorię zgłoszenia").addOptions({label:"Pomoc prawna",value:"Pomoc prawna",emoji:"⚖️",description:"Ogólne zapytanie i konsultacja"},{label:"Sprawa karna",value:"Sprawa karna",emoji:"🔎",description:"Postępowanie lub problem karny"},{label:"Sprawa cywilna",value:"Sprawa cywilna",emoji:"📄",description:"Spór cywilny lub roszczenie"},{label:"Sprawa administracyjna",value:"Sprawa administracyjna",emoji:"🏛️",description:"Sprawa przed organem administracji"},{label:"Sprawa gospodarcza",value:"Sprawa gospodarcza",emoji:"💼",description:"Sprawy firmowe i gospodarcze"},{label:"Skarga lub odwołanie",value:"Skarga lub odwołanie",emoji:"📝",description:"Skarga na działanie lub odwołanie"},{label:"Inne",value:"Inne",emoji:"📬",description:"Pozostałe sprawy"});
+  await panelChannel.send({embeds:[embed],components:[new ActionRowBuilder().addComponents(menu)]});
  }
 }
 return {madeRoles,madeCategories,madeChannels};
 }
 client.on("interactionCreate",async i=>{
 try{
+if(i.isStringSelectMenu()&&i.customId==="ticket_category"){
+ const modal=new ModalBuilder().setCustomId("ticket_form:"+i.values[0]).setTitle("Formularz zgłoszenia — Kancelaria");
+ const name=new TextInputBuilder().setCustomId("client_name").setLabel("Imię i nazwisko / nick RP").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80);
+ const subject=new TextInputBuilder().setCustomId("subject").setLabel("Temat zgłoszenia").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100);
+ const details=new TextInputBuilder().setCustomId("details").setLabel("Opisz sprawę i czego oczekujesz").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1500);
+ modal.addComponents(new ActionRowBuilder().addComponents(name),new ActionRowBuilder().addComponents(subject),new ActionRowBuilder().addComponents(details));
+ return i.showModal(modal);
+}
+if(i.isModalSubmit()&&i.customId.startsWith("ticket_form:")){
+ await i.deferReply({flags:MessageFlags.Ephemeral});
+ const guild=i.guild;
+ const category=guild?.channels.cache.find(c=>c.type===4&&c.name==="🎫 TICKETY");
+ if(!category)return i.editReply("Brakuje kategorii 🎫 TICKETY. Administrator musi uruchomić /konfiguruj-serwer.");
+ const old=guild.channels.cache.find(c=>c.type===0&&c.parentId===category.id&&c.topic?.startsWith("ticket-owner:"+i.user.id+"|"));
+ if(old)return i.editReply("Masz już otwarte zgłoszenie: "+old);
+ const staffRoleNames=["Prezes","Wiceprezes","Dyrektor Zarządzający","Kierownik Departamentu","Adwokat","Aplikant Adwokacki","Asystent Prawny","Sekretariat"];
+ const staffRoles=guild.roles.cache.filter(r=>staffRoleNames.includes(r.name)).map(r=>({id:r.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]}));
+ const categoryName=i.customId.slice("ticket_form:".length);
+ const serial=String(Date.now()).slice(-6);
+ const safeName=i.user.username.toLowerCase().replace(/[^a-z0-9-]/g,"").slice(0,12)||"klient";
+ const ch=await guild.channels.create({name:"zgl-"+serial+"-"+safeName,type:0,parent:category.id,topic:"ticket-owner:"+i.user.id+"|category:"+categoryName+"|status:nowe",permissionOverwrites:[{id:guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:i.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.AttachFiles]},...staffRoles],reason:"Nowe zgłoszenie do Kancelarii Adwokackiej RP"});
+ const embed=new EmbedBuilder().setColor(0x1f4e79).setTitle("📂 NOWE ZGŁOSZENIE — "+serial).setDescription("Zgłoszenie zostało przyjęte do systemu Kancelarii Adwokackiej RP. Prosimy o oczekiwanie na pracownika kancelarii.").addFields({name:"Numer zgłoszenia",value:"KA-T-"+serial,inline:true},{name:"Status",value:"🟡 Oczekuje na przyjęcie",inline:true},{name:"Kategoria",value:categoryName,inline:true},{name:"Dane zgłaszającego",value:i.fields.getTextInputValue("client_name")},{name:"Temat",value:i.fields.getTextInputValue("subject")},{name:"Opis sprawy",value:i.fields.getTextInputValue("details")}).setFooter({text:"Kancelaria Adwokacka RP • Zgłoszenie poufne"}).setTimestamp();
+ const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("ticket_claim").setLabel("Przejmij zgłoszenie").setEmoji("📌").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("ticket_close").setLabel("Zamknij zgłoszenie").setEmoji("🔒").setStyle(ButtonStyle.Danger));
+ await ch.send({content:i.user.toString()+" • **Nowe zgłoszenie oczekuje na obsługę.**",embeds:[embed],components:[row]});
+ return i.editReply("Zgłoszenie **KA-T-"+serial+"** zostało utworzone: "+ch);
+}
 if(i.isButton()){
  const guild=i.guild;
  if(!guild)return;
@@ -69,7 +96,7 @@ if(i.isButton()){
  const isStaff= i.memberPermissions?.has(PermissionFlagsBits.Administrator)||staffRoleNames.some(name=>i.member?.roles?.cache?.some(r=>r.name===name));
  if(i.customId==="ticket_open"){
   await i.deferReply({flags:MessageFlags.Ephemeral});
-  const old=guild.channels.cache.find(c=>c.type===0&&c.parent?.name==="🎫 TICKETY"&&c.topic===("ticket-owner:"+i.user.id));
+  const old=guild.channels.cache.find(c=>c.type===0&&c.parent?.name==="🎫 TICKETY"&&c.topic?.startsWith("ticket-owner:"+i.user.id+"|"));
   if(old)return i.editReply({content:"Masz już otwarty ticket: "+old});
   const category=guild.channels.cache.find(c=>c.type===4&&c.name==="🎫 TICKETY");
   if(!category)return i.editReply({content:"Brakuje kategorii ticketów. Administrator musi ponownie uruchomić /konfiguruj-serwer."});
@@ -81,17 +108,21 @@ if(i.isButton()){
  }
  if(i.customId==="ticket_claim"){
   if(!isStaff)return i.reply({content:"Tylko pracownik kancelarii może przejąć ticket.",flags:MessageFlags.Ephemeral});
-  await i.channel.send("📌 Ticket został przejęty przez "+i.user+".");
-  return i.reply({content:"Przejęto ticket.",flags:MessageFlags.Ephemeral});
+  const oldTopic=i.channel.topic||"";
+  if(oldTopic.includes("|status:przyjete"))return i.reply({content:"To zgłoszenie zostało już przejęte.",flags:MessageFlags.Ephemeral});
+  await i.channel.setTopic(oldTopic.replace("|status:nowe","|status:przyjete")+"|pracownik:"+i.user.id);
+  const msg=new EmbedBuilder().setColor(0x238636).setTitle("📌 ZGŁOSZENIE PRZEJĘTE").setDescription("Zgłoszenie zostało przejęte do obsługi przez "+i.user+".");
+  await i.channel.send({embeds:[msg]});
+  return i.reply({content:"Przejęto zgłoszenie.",flags:MessageFlags.Ephemeral});
  }
  if(i.customId==="ticket_close"){
-  const ownerId=i.channel?.topic?.startsWith("ticket-owner:")?i.channel.topic.slice("ticket-owner:".length):null;
+  const ownerId=i.channel?.topic?.startsWith("ticket-owner:")?i.channel.topic.slice("ticket-owner:".length).split("|")[0]:null;
   if(i.user.id!==ownerId&&!isStaff)return i.reply({content:"Ticket może zamknąć jego autor lub pracownik kancelarii.",flags:MessageFlags.Ephemeral});
   await i.deferReply({flags:MessageFlags.Ephemeral});
   const messages=await i.channel.messages.fetch({limit:100}).catch(()=>null);
   const transcript=messages?[...messages.values()].sort((a,b)=>a.createdTimestamp-b.createdTimestamp).map(m=>`[${new Date(m.createdTimestamp).toISOString()}] ${m.author.tag}: ${m.content}`).join("\\n"):"Nie udało się pobrać wiadomości.";
   const archive=guild.channels.cache.find(c=>c.type===0&&c.name==="archiwum-ticketów");
-  if(archive)await archive.send({content:"**Zamknięty ticket:** "+i.channel.name+"\\n**Autor:** <@"+(ownerId||"0")+">",files:[new AttachmentBuilder(Buffer.from(transcript,"utf8"),{name:i.channel.name+"-transkrypcja.txt"})]}).catch(e=>console.error("Błąd archiwizacji ticketu:",e));
+  if(archive)await archive.send({content:"**ZAMKNIĘTE ZGŁOSZENIE KANCELARII**\\n**Kanał:** "+i.channel.name+"\\n**Autor:** <@"+(ownerId||"0")+">\\n**Zamknął:** "+i.user,files:[new AttachmentBuilder(Buffer.from(transcript,"utf8"),{name:i.channel.name+"-transkrypcja.txt"})]}).catch(e=>console.error("Błąd archiwizacji ticketu:",e));
   await i.editReply(archive?"Ticket zamknięty, a transkrypcja zapisana w archiwum.":"Ticket zamknięty. Nie znaleziono kanału archiwum.");
   await i.channel.delete("Ticket zamknięty").catch(()=>{});
   return;
