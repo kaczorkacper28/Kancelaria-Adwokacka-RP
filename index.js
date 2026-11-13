@@ -49,7 +49,7 @@ madeChannels++;
 }
 }
 const ticketCategory=guild.channels.cache.find(c=>c.type===4&&c.name==="🎫 TICKETY");
-const panelChannel=guild.channels.cache.find(c=>c.type===0&&c.name==="kontakt-z-kancelarią");
+const panelChannel=guild.channels.cache.find(c=>c.type===0&&c.name==="kontakt-z-kancelarią"&&c.parent?.name==="🌐 STREFA OBYWATELA");
 if(panelChannel){
  const recent=await panelChannel.messages.fetch({limit:50}).catch(()=>null);
  const hasPanel=recent?.some(m=>m.author.id===client.user.id&&m.components.some(row=>row.components.some(b=>b.customId==="ticket_open")));
