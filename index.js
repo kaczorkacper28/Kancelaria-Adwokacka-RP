@@ -1,6 +1,6 @@
 "use strict";
 require("dotenv").config();
-const {Client,GatewayIntentBits,REST,Routes,SlashCommandBuilder,PermissionFlagsBits,ActionRowBuilder,ButtonBuilder,ButtonStyle,AttachmentBuilder}=require("discord.js");
+const {Client,GatewayIntentBits,REST,Routes,SlashCommandBuilder,PermissionFlagsBits,MessageFlags,ActionRowBuilder,ButtonBuilder,ButtonStyle,AttachmentBuilder}=require("discord.js");
 const fs=require("node:fs"),path=require("node:path");
 const dir=path.join(__dirname,"data"),file=path.join(dir,"database.json");
 fs.mkdirSync(dir,{recursive:true});
@@ -15,7 +15,7 @@ new SlashCommandBuilder().setName("konfiguruj-serwer").setDescription("Utwórz r
 ].map(x=>x.toJSON());
 function staff(m){const ids=[process.env.PRESIDENT_ROLE_ID,process.env.STAFF_ROLE_ID].filter(Boolean);return m.permissions.has(PermissionFlagsBits.Administrator)||ids.some(id=>m.roles.cache.has(id))}
 const client=new Client({intents:[GatewayIntentBits.Guilds]});
-client.once("ready",async()=>{console.log("Bot zalogowany: "+client.user.tag);if(!process.env.GUILD_ID)return;try{const appId=client.application.id;console.log("ID aplikacji zalogowanego bota: "+appId);const rest=new REST({version:"10"}).setToken(process.env.DISCORD_TOKEN);await rest.put(Routes.applicationGuildCommands(appId,process.env.GUILD_ID),{body:commands});console.log("Komendy serwera zarejestrowane.")}catch(e){console.error("Błąd rejestracji komend:",e.message)}});
+client.once("clientReady",async()=>{console.log("Bot zalogowany: "+client.user.tag);if(!process.env.GUILD_ID)return;try{const appId=client.application.id;console.log("ID aplikacji zalogowanego bota: "+appId);const rest=new REST({version:"10"}).setToken(process.env.DISCORD_TOKEN);await rest.put(Routes.applicationGuildCommands(appId,process.env.GUILD_ID),{body:commands});console.log("Komendy serwera zarejestrowane.")}catch(e){console.error("Błąd rejestracji komend:",e.message)}});
 async function configureGuild(guild){
 const roleNames=["Prezes","Wiceprezes","Dyrektor Zarządzający","Kierownik Departamentu","Adwokat","Aplikant Adwokacki","Asystent Prawny","Sekretariat","Klient"];
 const roleMap={};let madeRoles=0;
@@ -67,25 +67,26 @@ if(i.isButton()){
  const staffRoleNames=["Prezes","Wiceprezes","Dyrektor Zarządzający","Kierownik Departamentu","Adwokat","Aplikant Adwokacki","Asystent Prawny","Sekretariat"];
  const isStaff= i.memberPermissions?.has(PermissionFlagsBits.Administrator)||staffRoleNames.some(name=>i.member?.roles?.cache?.some(r=>r.name===name));
  if(i.customId==="ticket_open"){
+  await i.deferReply({flags:MessageFlags.Ephemeral});
   const old=guild.channels.cache.find(c=>c.type===0&&c.parent?.name==="🎫 TICKETY"&&c.topic===("ticket-owner:"+i.user.id));
-  if(old)return i.reply({content:"Masz już otwarty ticket: "+old,ephemeral:true});
+  if(old)return i.editReply({content:"Masz już otwarty ticket: "+old});
   const category=guild.channels.cache.find(c=>c.type===4&&c.name==="🎫 TICKETY");
-  if(!category)return i.reply({content:"Brakuje kategorii ticketów. Administrator musi ponownie uruchomić /konfiguruj-serwer.",ephemeral:true});
+  if(!category)return i.editReply({content:"Brakuje kategorii ticketów. Administrator musi ponownie uruchomić /konfiguruj-serwer."});
   const staffRoles=guild.roles.cache.filter(r=>staffRoleNames.includes(r.name)).map(r=>({id:r.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]}));
   const ch=await guild.channels.create({name:"ticket-"+i.user.username.toLowerCase().replace(/[^a-z0-9-]/g,"").slice(0,18),type:0,parent:category.id,topic:"ticket-owner:"+i.user.id,permissionOverwrites:[{id:guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:i.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.AttachFiles]},...staffRoles],reason:"Nowy ticket obywatela"});
   const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("ticket_claim").setLabel("Przejmij ticket").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("ticket_close").setLabel("Zamknij ticket").setStyle(ButtonStyle.Danger));
   await ch.send({content:"Witaj "+i.user+"! Opisz, w jakiej sprawie potrzebujesz pomocy. Pracownik kancelarii odpowie tutaj.\\n**Obsługa ticketu:**",components:[row]});
-  return i.reply({content:"Utworzono Twój prywatny ticket: "+ch,ephemeral:true});
+  return i.editReply({content:"Utworzono Twój prywatny ticket: "+ch});
  }
  if(i.customId==="ticket_claim"){
-  if(!isStaff)return i.reply({content:"Tylko pracownik kancelarii może przejąć ticket.",ephemeral:true});
+  if(!isStaff)return i.reply({content:"Tylko pracownik kancelarii może przejąć ticket.",flags:MessageFlags.Ephemeral});
   await i.channel.send("📌 Ticket został przejęty przez "+i.user+".");
-  return i.reply({content:"Przejęto ticket.",ephemeral:true});
+  return i.reply({content:"Przejęto ticket.",flags:MessageFlags.Ephemeral});
  }
  if(i.customId==="ticket_close"){
   const ownerId=i.channel?.topic?.startsWith("ticket-owner:")?i.channel.topic.slice("ticket-owner:".length):null;
-  if(i.user.id!==ownerId&&!isStaff)return i.reply({content:"Ticket może zamknąć jego autor lub pracownik kancelarii.",ephemeral:true});
-  await i.deferReply({ephemeral:true});
+  if(i.user.id!==ownerId&&!isStaff)return i.reply({content:"Ticket może zamknąć jego autor lub pracownik kancelarii.",flags:MessageFlags.Ephemeral});
+  await i.deferReply({flags:MessageFlags.Ephemeral});
   const messages=await i.channel.messages.fetch({limit:100}).catch(()=>null);
   const transcript=messages?[...messages.values()].sort((a,b)=>a.createdTimestamp-b.createdTimestamp).map(m=>`[${new Date(m.createdTimestamp).toISOString()}] ${m.author.tag}: ${m.content}`).join("\\n"):"Nie udało się pobrać wiadomości.";
   const archive=guild.channels.cache.find(c=>c.type===0&&c.name==="archiwum-ticketów");
@@ -97,11 +98,12 @@ if(i.isButton()){
  return;
 }
 if(!i.isChatInputCommand())return;const n=i.commandName;
-if(n==="konfiguruj-serwer"){if(!i.guild||!i.memberPermissions?.has(PermissionFlagsBits.Administrator))return i.reply({content:"Tylko administrator serwera może uruchomić konfigurację.",ephemeral:true});if(!i.guild.members.me.permissions.has([PermissionFlagsBits.ManageRoles,PermissionFlagsBits.ManageChannels]))return i.reply({content:"Bot potrzebuje uprawnień Zarządzanie rolami i Zarządzanie kanałami. Nadaj je botowi i spróbuj ponownie.",ephemeral:true});await i.deferReply({ephemeral:true});try{const result=await configureGuild(i.guild);return i.editReply("Konfiguracja zakończona. Utworzono role: "+result.madeRoles+", kategorie: "+result.madeCategories+", kanały: "+result.madeChannels+". Istniejące elementy pozostawiono bez zmian.");}catch(e){console.error("Błąd konfiguracji serwera:",e);return i.editReply("Nie udało się dokończyć konfiguracji: "+e.message);}}
-if(["sprawa","status-sprawy","pracownik"].includes(n)&&!staff(i.member))return i.reply({content:"Komenda dostępna tylko dla personelu kancelarii.",ephemeral:true});const d=read();
-if(n==="sprawa"){const x={id:"KA-"+new Date().getFullYear()+"-"+String(Date.now()).slice(-6),title:i.options.getString("tytul"),client:i.options.getString("klient"),type:i.options.getString("rodzaj"),lawyer:i.user.tag,status:"Nowa",notes:"",createdAt:new Date().toISOString()};d.cases.unshift(x);save(d);if(process.env.CASES_CHANNEL_ID){const ch=await client.channels.fetch(process.env.CASES_CHANNEL_ID).catch(()=>null);if(ch)await ch.send("**Nowa sprawa "+x.id+"**\n"+x.title+" · "+x.type+"\nKlient: "+x.client)}return i.reply({content:"Zarejestrowano sprawę **"+x.id+"**.",ephemeral:true})}
-if(n==="moje-sprawy"){const rows=d.cases.slice(0,10);return i.reply({content:rows.length?rows.map(x=>"**"+x.id+"** — "+x.title+" · "+x.status).join("\n"):"Brak spraw.",ephemeral:true})}
-if(n==="status-sprawy"){const x=d.cases.find(x=>x.id.toLowerCase()===i.options.getString("numer").toLowerCase());if(!x)return i.reply({content:"Nie znaleziono sprawy.",ephemeral:true});x.status=i.options.getString("status");save(d);return i.reply({content:"Status sprawy "+x.id+": **"+x.status+"**.",ephemeral:true})}
-if(n==="pracownik"){const x={id:"PR-"+Date.now().toString().slice(-7),name:i.options.getString("osoba"),role:i.options.getString("stanowisko"),discord:i.user.tag,active:true,createdAt:new Date().toISOString()};d.staff.unshift(x);save(d);return i.reply({content:"Dodano: **"+x.name+"** — "+x.role,ephemeral:true})}
-});
+if(n==="konfiguruj-serwer"){if(!i.guild||!i.memberPermissions?.has(PermissionFlagsBits.Administrator))return i.reply({content:"Tylko administrator serwera może uruchomić konfigurację.",flags:MessageFlags.Ephemeral});if(!i.guild.members.me.permissions.has([PermissionFlagsBits.ManageRoles,PermissionFlagsBits.ManageChannels]))return i.reply({content:"Bot potrzebuje uprawnień Zarządzanie rolami i Zarządzanie kanałami. Nadaj je botowi i spróbuj ponownie.",flags:MessageFlags.Ephemeral});await i.deferReply({ephemeral:true});try{const result=await configureGuild(i.guild);return i.editReply("Konfiguracja zakończona. Utworzono role: "+result.madeRoles+", kategorie: "+result.madeCategories+", kanały: "+result.madeChannels+". Istniejące elementy pozostawiono bez zmian.");}catch(e){console.error("Błąd konfiguracji serwera:",e);return i.editReply("Nie udało się dokończyć konfiguracji: "+e.message);}}
+if(["sprawa","status-sprawy","pracownik"].includes(n)&&!staff(i.member))return i.reply({content:"Komenda dostępna tylko dla personelu kancelarii.",flags:MessageFlags.Ephemeral});const d=read();
+if(n==="sprawa"){const x={id:"KA-"+new Date().getFullYear()+"-"+String(Date.now()).slice(-6),title:i.options.getString("tytul"),client:i.options.getString("klient"),type:i.options.getString("rodzaj"),lawyer:i.user.tag,status:"Nowa",notes:"",createdAt:new Date().toISOString()};d.cases.unshift(x);save(d);if(process.env.CASES_CHANNEL_ID){const ch=await client.channels.fetch(process.env.CASES_CHANNEL_ID).catch(()=>null);if(ch)await ch.send("**Nowa sprawa "+x.id+"**\n"+x.title+" · "+x.type+"\nKlient: "+x.client)}return i.reply({content:"Zarejestrowano sprawę **"+x.id+"**.",flags:MessageFlags.Ephemeral})}
+if(n==="moje-sprawy"){const rows=d.cases.slice(0,10);return i.reply({content:rows.length?rows.map(x=>"**"+x.id+"** — "+x.title+" · "+x.status).join("\n"):"Brak spraw.",flags:MessageFlags.Ephemeral})}
+if(n==="status-sprawy"){const x=d.cases.find(x=>x.id.toLowerCase()===i.options.getString("numer").toLowerCase());if(!x)return i.reply({content:"Nie znaleziono sprawy.",flags:MessageFlags.Ephemeral});x.status=i.options.getString("status");save(d);return i.reply({content:"Status sprawy "+x.id+": **"+x.status+"**.",flags:MessageFlags.Ephemeral})}
+if(n==="pracownik"){const x={id:"PR-"+Date.now().toString().slice(-7),name:i.options.getString("osoba"),role:i.options.getString("stanowisko"),discord:i.user.tag,active:true,createdAt:new Date().toISOString()};d.staff.unshift(x);save(d);return i.reply({content:"Dodano: **"+x.name+"** — "+x.role,flags:MessageFlags.Ephemeral})}
+}).catch(e=>{console.error("Błąd obsługi interakcji:",e);});
+client.on("error",e=>console.error("Błąd klienta Discord:",e));
 if(process.env.DISCORD_TOKEN)client.login(process.env.DISCORD_TOKEN).catch(e=>console.error("Błąd logowania bota:",e.message));else console.log("Brak DISCORD_TOKEN — bot Discord nie został uruchomiony.");
