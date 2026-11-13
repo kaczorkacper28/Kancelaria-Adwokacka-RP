@@ -14,7 +14,7 @@ new SlashCommandBuilder().setName("pracownik").setDescription("Dodaj pracownika"
 new SlashCommandBuilder().setName("konfiguruj-serwer").setDescription("Utwórz role, kategorie i kanały kancelarii").setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 ].map(x=>x.toJSON());
 function staff(m){const ids=[process.env.PRESIDENT_ROLE_ID,process.env.STAFF_ROLE_ID].filter(Boolean);return m.permissions.has(PermissionFlagsBits.Administrator)||ids.some(id=>m.roles.cache.has(id))}
-const client=new Client({intents:[GatewayIntentBits.Guilds]});
+const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent]});
 client.once("clientReady",async()=>{console.log("Bot zalogowany: "+client.user.tag);if(!process.env.GUILD_ID)return;try{const appId=client.application.id;console.log("ID aplikacji zalogowanego bota: "+appId);const rest=new REST({version:"10"}).setToken(process.env.DISCORD_TOKEN);await rest.put(Routes.applicationGuildCommands(appId,process.env.GUILD_ID),{body:commands});console.log("Komendy serwera zarejestrowane.")}catch(e){console.error("Błąd rejestracji komend:",e.message)}});
 async function configureGuild(guild){
 const roleNames=["Prezes","Wiceprezes","Dyrektor Zarządzający","Kierownik Departamentu","Adwokat","Aplikant Adwokacki","Asystent Prawny","Sekretariat","Klient"];
@@ -85,7 +85,7 @@ if(i.isModalSubmit()&&i.customId.startsWith("ticket_form:")){
  const safeName=i.user.username.toLowerCase().replace(/[^a-z0-9-]/g,"").slice(0,12)||"klient";
  const ch=await guild.channels.create({name:"zgl-"+serial+"-"+safeName,type:0,parent:category.id,topic:"ticket-owner:"+i.user.id+"|category:"+categoryName+"|status:nowe",permissionOverwrites:[{id:guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:i.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.AttachFiles]},...staffRoles],reason:"Nowe zgłoszenie do Kancelarii Adwokackiej RP"});
  const embed=new EmbedBuilder().setColor(0x1f4e79).setTitle("📂 NOWE ZGŁOSZENIE — "+serial).setDescription("Zgłoszenie zostało przyjęte do systemu Kancelarii Adwokackiej RP. Prosimy o oczekiwanie na pracownika kancelarii.").addFields({name:"Numer zgłoszenia",value:"KA-T-"+serial,inline:true},{name:"Status",value:"🟡 Oczekuje na przyjęcie",inline:true},{name:"Kategoria",value:categoryName,inline:true},{name:"Dane zgłaszającego",value:i.fields.getTextInputValue("client_name")},{name:"Temat",value:i.fields.getTextInputValue("subject")},{name:"Opis sprawy",value:i.fields.getTextInputValue("details")}).setFooter({text:"Kancelaria Adwokacka RP • Zgłoszenie poufne"}).setTimestamp();
- const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("ticket_claim").setLabel("Przejmij zgłoszenie").setEmoji("📌").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("ticket_close").setLabel("Zamknij zgłoszenie").setEmoji("🔒").setStyle(ButtonStyle.Danger));
+ const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("ticket_claim").setLabel("Przyjmij zgłoszenie").setEmoji("📌").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("ticket_reject").setLabel("Odrzuć zgłoszenie").setEmoji("⛔").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("ticket_close").setLabel("Zamknij zgłoszenie").setEmoji("🔒").setStyle(ButtonStyle.Danger));
  await ch.send({content:i.user.toString()+" • **Nowe zgłoszenie oczekuje na obsługę.**",embeds:[embed],components:[row]});
  return i.editReply("Zgłoszenie **KA-T-"+serial+"** zostało utworzone: "+ch);
 }
@@ -114,6 +114,14 @@ if(i.isButton()){
   const msg=new EmbedBuilder().setColor(0x238636).setTitle("📌 ZGŁOSZENIE PRZEJĘTE").setDescription("Zgłoszenie zostało przejęte do obsługi przez "+i.user+".");
   await i.channel.send({embeds:[msg]});
   return i.reply({content:"Przejęto zgłoszenie.",flags:MessageFlags.Ephemeral});
+ }
+ if(i.customId==="ticket_reject"){
+  if(!isStaff)return i.reply({content:"Tylko pracownik kancelarii może odrzucić zgłoszenie.",flags:MessageFlags.Ephemeral});
+  const topic=i.channel.topic||"";
+  if(topic.includes("|status:odrzucone"))return i.reply({content:"To zgłoszenie zostało już odrzucone.",flags:MessageFlags.Ephemeral});
+  await i.channel.setTopic(topic.replace("|status:nowe","|status:odrzucone").replace("|status:przyjete","|status:odrzucone"));
+  await i.channel.send({embeds:[new EmbedBuilder().setColor(0xb42318).setTitle("⛔ ZGŁOSZENIE ODRZUCONE").setDescription("Zgłoszenie zostało oznaczone jako odrzucone przez "+i.user+". W razie pytań skontaktuj się z personelem kancelarii.").setTimestamp()]});
+  return i.reply({content:"Oznaczono zgłoszenie jako odrzucone.",flags:MessageFlags.Ephemeral});
  }
  if(i.customId==="ticket_close"){
   const ownerId=i.channel?.topic?.startsWith("ticket-owner:")?i.channel.topic.slice("ticket-owner:".length).split("|")[0]:null;
