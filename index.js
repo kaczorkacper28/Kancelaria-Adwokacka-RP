@@ -18,8 +18,8 @@ const client=new Client({intents:[GatewayIntentBits.Guilds]});
 client.once("ready",async()=>{console.log("Bot zalogowany: "+client.user.tag);if(!process.env.CLIENT_ID||!process.env.GUILD_ID)return;try{const rest=new REST({version:"10"}).setToken(process.env.DISCORD_TOKEN);await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID,process.env.GUILD_ID),{body:commands});console.log("Komendy serwera zarejestrowane.")}catch(e){console.error("Błąd rejestracji komend:",e.message)}});
 async function configureGuild(guild){
 const roleNames=["Prezes","Wiceprezes","Dyrektor Zarządzający","Kierownik Departamentu","Adwokat","Aplikant Adwokacki","Asystent Prawny","Sekretariat","Klient"];
-const roleMap={};
-for(const name of roleNames){let role=guild.roles.cache.find(r=>r.name===name);if(!role)role=await guild.roles.create({name,reason:"Konfiguracja kancelarii RP"});roleMap[name]=role;}
+const roleMap={};let madeRoles=0;
+for(const name of roleNames){let role=guild.roles.cache.find(r=>r.name===name);if(!role){role=await guild.roles.create({name,reason:"Konfiguracja kancelarii RP"});madeRoles++;}roleMap[name]=role;}
 await guild.roles.fetch();
 const everyone=guild.roles.everyone;
 const staffRoles=["Prezes","Wiceprezes","Dyrektor Zarządzający","Kierownik Departamentu","Adwokat","Aplikant Adwokacki","Asystent Prawny","Sekretariat"].map(n=>roleMap[n].id);
@@ -37,8 +37,7 @@ const sections=[
 ];
 const existingCategories=guild.channels.cache.filter(c=>c.type===4);
 const existingChannels=guild.channels.cache;
-let madeRoles=0,madeCategories=0,madeChannels=0;
-for(const name of roleNames)if(!guild.roles.cache.some(r=>r.name===name))madeRoles++;
+let madeCategories=0,madeChannels=0;
 for(const section of sections){
 let category=existingCategories.find(c=>c.name===section.name);
 if(!category){category=await guild.channels.create({name:section.name,type:4,permissionOverwrites:section.public?publicOverwrites:[allStaff,...staffAllow]});madeCategories++;}
