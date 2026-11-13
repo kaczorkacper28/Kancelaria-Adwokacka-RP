@@ -61,6 +61,7 @@ if(panelChannel){
 return {madeRoles,madeCategories,madeChannels};
 }
 client.on("interactionCreate",async i=>{
+try{
 if(i.isButton()){
  const guild=i.guild;
  if(!guild)return;
@@ -98,12 +99,13 @@ if(i.isButton()){
  return;
 }
 if(!i.isChatInputCommand())return;const n=i.commandName;
-if(n==="konfiguruj-serwer"){if(!i.guild||!i.memberPermissions?.has(PermissionFlagsBits.Administrator))return i.reply({content:"Tylko administrator serwera może uruchomić konfigurację.",flags:MessageFlags.Ephemeral});if(!i.guild.members.me.permissions.has([PermissionFlagsBits.ManageRoles,PermissionFlagsBits.ManageChannels]))return i.reply({content:"Bot potrzebuje uprawnień Zarządzanie rolami i Zarządzanie kanałami. Nadaj je botowi i spróbuj ponownie.",flags:MessageFlags.Ephemeral});await i.deferReply({ephemeral:true});try{const result=await configureGuild(i.guild);return i.editReply("Konfiguracja zakończona. Utworzono role: "+result.madeRoles+", kategorie: "+result.madeCategories+", kanały: "+result.madeChannels+". Istniejące elementy pozostawiono bez zmian.");}catch(e){console.error("Błąd konfiguracji serwera:",e);return i.editReply("Nie udało się dokończyć konfiguracji: "+e.message);}}
+if(n==="konfiguruj-serwer"){if(!i.guild||!i.memberPermissions?.has(PermissionFlagsBits.Administrator))return i.reply({content:"Tylko administrator serwera może uruchomić konfigurację.",flags:MessageFlags.Ephemeral});if(!i.guild.members.me.permissions.has([PermissionFlagsBits.ManageRoles,PermissionFlagsBits.ManageChannels]))return i.reply({content:"Bot potrzebuje uprawnień Zarządzanie rolami i Zarządzanie kanałami. Nadaj je botowi i spróbuj ponownie.",flags:MessageFlags.Ephemeral});await i.deferReply({flags:MessageFlags.Ephemeral});try{const result=await configureGuild(i.guild);return i.editReply("Konfiguracja zakończona. Utworzono role: "+result.madeRoles+", kategorie: "+result.madeCategories+", kanały: "+result.madeChannels+". Istniejące elementy pozostawiono bez zmian.");}catch(e){console.error("Błąd konfiguracji serwera:",e);return i.editReply("Nie udało się dokończyć konfiguracji: "+e.message);}}
 if(["sprawa","status-sprawy","pracownik"].includes(n)&&!staff(i.member))return i.reply({content:"Komenda dostępna tylko dla personelu kancelarii.",flags:MessageFlags.Ephemeral});const d=read();
 if(n==="sprawa"){const x={id:"KA-"+new Date().getFullYear()+"-"+String(Date.now()).slice(-6),title:i.options.getString("tytul"),client:i.options.getString("klient"),type:i.options.getString("rodzaj"),lawyer:i.user.tag,status:"Nowa",notes:"",createdAt:new Date().toISOString()};d.cases.unshift(x);save(d);if(process.env.CASES_CHANNEL_ID){const ch=await client.channels.fetch(process.env.CASES_CHANNEL_ID).catch(()=>null);if(ch)await ch.send("**Nowa sprawa "+x.id+"**\n"+x.title+" · "+x.type+"\nKlient: "+x.client)}return i.reply({content:"Zarejestrowano sprawę **"+x.id+"**.",flags:MessageFlags.Ephemeral})}
 if(n==="moje-sprawy"){const rows=d.cases.slice(0,10);return i.reply({content:rows.length?rows.map(x=>"**"+x.id+"** — "+x.title+" · "+x.status).join("\n"):"Brak spraw.",flags:MessageFlags.Ephemeral})}
 if(n==="status-sprawy"){const x=d.cases.find(x=>x.id.toLowerCase()===i.options.getString("numer").toLowerCase());if(!x)return i.reply({content:"Nie znaleziono sprawy.",flags:MessageFlags.Ephemeral});x.status=i.options.getString("status");save(d);return i.reply({content:"Status sprawy "+x.id+": **"+x.status+"**.",flags:MessageFlags.Ephemeral})}
 if(n==="pracownik"){const x={id:"PR-"+Date.now().toString().slice(-7),name:i.options.getString("osoba"),role:i.options.getString("stanowisko"),discord:i.user.tag,active:true,createdAt:new Date().toISOString()};d.staff.unshift(x);save(d);return i.reply({content:"Dodano: **"+x.name+"** — "+x.role,flags:MessageFlags.Ephemeral})}
-}).catch(e=>{console.error("Błąd obsługi interakcji:",e);});
+}catch(e){console.error("Błąd obsługi interakcji:",e);}
+});
 client.on("error",e=>console.error("Błąd klienta Discord:",e));
 if(process.env.DISCORD_TOKEN)client.login(process.env.DISCORD_TOKEN).catch(e=>console.error("Błąd logowania bota:",e.message));else console.log("Brak DISCORD_TOKEN — bot Discord nie został uruchomiony.");
