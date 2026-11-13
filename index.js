@@ -15,7 +15,7 @@ new SlashCommandBuilder().setName("konfiguruj-serwer").setDescription("Utwórz r
 ].map(x=>x.toJSON());
 function staff(m){const ids=[process.env.PRESIDENT_ROLE_ID,process.env.STAFF_ROLE_ID].filter(Boolean);return m.permissions.has(PermissionFlagsBits.Administrator)||ids.some(id=>m.roles.cache.has(id))}
 const client=new Client({intents:[GatewayIntentBits.Guilds]});
-client.once("ready",async()=>{console.log("Bot zalogowany: "+client.user.tag);if(!process.env.CLIENT_ID||!process.env.GUILD_ID)return;try{const rest=new REST({version:"10"}).setToken(process.env.DISCORD_TOKEN);await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID,process.env.GUILD_ID),{body:commands});console.log("Komendy serwera zarejestrowane.")}catch(e){console.error("Błąd rejestracji komend:",e.message)}});
+client.once("ready",async()=>{console.log("Bot zalogowany: "+client.user.tag);if(!process.env.GUILD_ID)return;try{const appId=client.application.id;console.log("ID aplikacji zalogowanego bota: "+appId);const rest=new REST({version:"10"}).setToken(process.env.DISCORD_TOKEN);await rest.put(Routes.applicationGuildCommands(appId,process.env.GUILD_ID),{body:commands});console.log("Komendy serwera zarejestrowane.")}catch(e){console.error("Błąd rejestracji komend:",e.message)}});
 async function configureGuild(guild){
 const roleNames=["Prezes","Wiceprezes","Dyrektor Zarządzający","Kierownik Departamentu","Adwokat","Aplikant Adwokacki","Asystent Prawny","Sekretariat","Klient"];
 const roleMap={};let madeRoles=0;
